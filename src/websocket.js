@@ -1,6 +1,6 @@
 // WebSocket de base avec ws
 const WebSocket = require('ws');
-const { getUserIdFromToken } = require('./auth');
+const { getUserIdFromToken } = require('./auth/auth');
 
 const wss = new WebSocket.Server({ port: 8081 });
 const clients = new Map();

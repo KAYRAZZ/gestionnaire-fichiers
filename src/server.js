@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const url = require('url');
-const { authenticate, getUserIdFromToken } = require('./auth');
+const { authenticate, getUserIdFromToken } = require('./auth/auth');
 const path = require('path');
 const { notifyUser } = require('./websocket');
 
@@ -23,8 +23,8 @@ const server = http.createServer((req, res) => {
     });
 
     // Page d'accueil
-  } else if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
-    const filePath = path.join(__dirname, 'index.html');
+  } else if (req.method === 'GET' && req.url === '/') {
+    const filePath = path.join(__dirname, './public/index.html');
     fs.readFile(filePath, (err, data) => {
       if (err) {
         res.writeHead(500);
@@ -37,7 +37,7 @@ const server = http.createServer((req, res) => {
 
     // Page de connexion
   } else if (req.method === 'GET' && req.url === '/login') {
-    const filePath = path.join(__dirname, 'src/auth/login.html');
+    const filePath = path.join(__dirname, './auth/login.html');
     fs.readFile(filePath, (err, data) => {
       if (err) {
         res.writeHead(500);
@@ -246,7 +246,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(401);
       return res.end('Unauthorized');
     }
-    const users = JSON.parse(fs.readFileSync(path.join(__dirname, 'users.json')));
+    const users = JSON.parse(fs.readFileSync(path.join(__dirname, '../users.json')));
     const usersNoPwd = users.map(u => ({ id: u.id, username: u.username }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(usersNoPwd));
@@ -267,7 +267,7 @@ const server = http.createServer((req, res) => {
         res.writeHead(400);
         return res.end('Paramètres manquants');
       }
-      const usersPath = path.join(__dirname, 'users.json');
+      const usersPath = path.join(__dirname, '../users.json');
       const users = JSON.parse(fs.readFileSync(usersPath));
       const user = users.find(u => u.id === userId);
       if (!user) {
@@ -293,7 +293,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(401);
       return res.end('Unauthorized');
     }
-    const users = JSON.parse(fs.readFileSync(path.join(__dirname, 'users.json')));
+    const users = JSON.parse(fs.readFileSync(path.join(__dirname, '../users.json')));
     const me = users.find(u => u.id === userId);
     if (!me || !me.sharedFolders) {
       res.writeHead(200, { 'Content-Type': 'application/json' });

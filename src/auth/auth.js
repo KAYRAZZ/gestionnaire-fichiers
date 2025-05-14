@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const users = JSON.parse(fs.readFileSync(path.join(__dirname, 'users.json')));
+const users = JSON.parse(fs.readFileSync(path.join(__dirname, '../../users.json')));
 const tokens = {};
 
 function authenticate(username, password) {

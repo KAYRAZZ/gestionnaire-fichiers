@@ -1,6 +1,6 @@
 const assert = require('assert');
 const { test } = require('node:test');
-const { authenticate, getUserIdFromToken } = require('../auth');
+const { authenticate, getUserIdFromToken } = require('../src/auth/auth');
 
 test('Authentification réussie', () => {
   const token = authenticate('alice', 'password123');
