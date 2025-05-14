@@ -6,9 +6,7 @@ const wss = new WebSocket.Server({ port: 8081 });
 const clients = new Map();
 
 wss.on('connection', ws => {
-  // On attend que le client s'identifie
   ws.on('message', message => {
-
     try {
       const data = JSON.parse(message);
       if (data.userId) {
