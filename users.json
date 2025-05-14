@@ -1,0 +1,34 @@
+[
+  {
+    "id": "user-001",
+    "username": "alice",
+    "password": "password123"
+  },
+  {
+    "id": "user-002",
+    "username": "bob",
+    "password": "secret456"
+  },
+  {
+    "id": "user-003",
+    "username": "a",
+    "password": "a",
+    "sharedFolders": [
+      {
+        "from": "user-004",
+        "folder": "efg"
+      }
+    ]
+  },
+  {
+    "id": "user-004",
+    "username": "b",
+    "password": "b",
+    "sharedFolders": [
+      {
+        "from": "user-003",
+        "folder": "abc"
+      }
+    ]
+  }
+]

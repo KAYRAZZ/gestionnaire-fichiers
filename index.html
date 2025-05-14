@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestionnaire de fichiers Node.js</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2em;
+        }
+
+        #files {
+            margin-top: 2em;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .file-list {
+            margin-top: 1em;
+        }
+
+        .file-list li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Gestionnaire de fichiers Node.js</h1>
+    <div id="loginSection" class="hidden">
+        <h2>Connexion</h2>
+        <form id="loginForm">
+            <input type="text" id="username" name="username" required placeholder="Nom d'utilisateur">
+            <input type="password" id="password" name="password" required placeholder="Mot de passe">
+            <button type="submit">Se connecter</button>
+        </form>
+    </div>
+
+    <div id="mainSection" class="hidden">
+        <h2>Bienvenue <span id="userDisplay"></span></h2>
+        <button id="logoutBtn">Déconnexion</button>
+
+        <div style="margin: 1em 0;">
+            <h3>Partager un dossier</h3>
+            <label>Choisir un utilisateur :
+                <select id="userSelect"></select>
+            </label>
+            <label>Choisir un dossier :
+                <select id="folderSelect"></select>
+            </label>
+            <button id="shareBtn">Partager</button>
+        </div>
+
+        <h3>Créer un dossier</h3>
+        <input type="text" id="newDirName" placeholder="Nom du dossier">
+        <button id="createDirBtn">Créer</button>
+
+        <h3>Vos fichiers</h3>
+        <ul id="fileList" class="file-list"></ul>
+        <h3>Uploader un fichier</h3>
+        <input type="file" id="fileInput" style="display:none;">
+        <button id="uploadBtn">Uploader</button>
+    </div>
+
+    <script>
+        let ws;
+        let uploadTargetDir = '';
+
+        // Vérifie si l'utilisateur est connecté
+        function isLoggedIn() {
+            return !!localStorage.getItem('token');
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('mainSection').classList.add('hidden');
+        }
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('username', username);
+                showMain();
+            } else {
+                alert('Identifiants invalides');
+            }
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').onclick = function () {
+            localStorage.removeItem('token');
+            localStorage.removeItem('username');
+            showLogin();
+        };
+
+        // Affiche la liste des fichiers sous forme de table groupée par dossier
+        async function loadFiles() {
+            const res = await fetch('/files', {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            });
+            const sharedRes = await fetch('/shared-folders', {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            });
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+            let sharedFolders = [];
+            if (sharedRes.ok) {
+                sharedFolders = await sharedRes.json();
+            }
+            if (res.ok) {
+                const files = await res.json();
+                if (!files.length && !sharedFolders.length) {
+                    fileList.innerHTML = '<li>Aucun fichier trouvé</li>';
+                    return;
+                }
+                // Organiser les fichiers et dossiers par dossier parent
+                const filesByDir = {};
+                files.forEach(file => {
+                    if (file.endsWith('/')) {
+                        if (!filesByDir[file]) filesByDir[file] = [];
+                    } else {
+                        const parts = file.split('/');
+                        let dir = 'racine';
+                        let filename = file;
+                        if (parts.length > 1) {
+                            dir = parts[0] + '/';
+                            filename = parts.slice(1).join('/');
+                        }
+                        if (!filesByDir[dir]) filesByDir[dir] = [];
+                        filesByDir[dir].push(filename);
+                    }
+                });
+
+                // Créer la table
+                let html = `<table border="1" style="border-collapse:collapse;width:100%;"><thead><tr><th>Dossier</th><th>Nom du fichier</th><th>Actions</th></tr></thead><tbody>`;
+                // Dossiers personnels
+                Object.entries(filesByDir).forEach(([dir, files]) => {
+                    if (files.length === 0) {
+                        html += `<tr>
+                    <td>
+                        ${dir === 'racine' ? 'racine' : dir.replace(/\/$/, '')}
+                        <button onclick="showUploadToDir('${dir === 'racine' ? '' : dir.replace(/'/g, "\\'")}')">Uploader ici</button>
+                    </td>
+                    <td colspan="2" style="text-align:center;color:#888;">(dossier vide)</td>
+                </tr>`;
+                    } else {
+                        files.forEach((filename, idx) => {
+                            const fullPath = dir === 'racine' ? filename : dir + filename;
+                            html += `<tr>
+                        ${idx === 0 ? `<td rowspan="${files.length}">
+                            ${dir === 'racine' ? 'racine' : dir.replace(/\/$/, '')}
+                            <button onclick="showUploadToDir('${dir === 'racine' ? '' : dir.replace(/'/g, "\\'")}')">Uploader ici</button>
+                        </td>` : ''}
+                        <td>${filename}</td>
+                        <td>
+                            <button onclick="downloadFile('${fullPath.replace(/'/g, "\\'")}')">Télécharger</button>
+                            <button onclick="deleteFile('${fullPath.replace(/'/g, "\\'")}')">Supprimer</button>
+                            <button onclick="compressFile('${fullPath.replace(/'/g, "\\'")}')">Compresser</button>
+                        </td>
+                    </tr>`;
+                        });
+                    }
+                });
+
+                // Dossiers partagés (affichage différencié)
+                sharedFolders.forEach(sf => {
+                    if (sf.files && sf.files.length) {
+                        sf.files.forEach((filename, idx) => {
+                            html += `<tr style="background:#e3f2fd;">
+                ${idx === 0 ? `<td rowspan="${sf.files.length}">
+                    <span title="Dossier partagé par ${sf.ownerName}">📁 ${sf.folder} <span style="color:#1976d2;">(partagé par ${sf.ownerName})</span></span>
+                </td>` : ''}
+                <td>${filename}</td>
+                <td style="text-align:center;">
+                    <button onclick="downloadSharedFile('${sf.ownerId}','${sf.folder}','${filename}')">Télécharger</button>
+                    <span style="color:#1976d2;">Lecture seule</span>
+                </td>
+            </tr>`;
+                        });
+                    } else {
+                        html += `<tr style="background:#e3f2fd;">
+            <td>
+                <span title="Dossier partagé par ${sf.ownerName}">📁 ${sf.folder} <span style="color:#1976d2;">(partagé par ${sf.ownerName})</span></span>
+            </td>
+            <td colspan="2" style="text-align:center;color:#1976d2;">(dossier vide ou inaccessible)</td>
+        </tr>`;
+                    }
+                });
+
+                html += `</tbody></table>`;
+                fileList.innerHTML = html;
+            } else {
+                fileList.innerHTML = '<li>Erreur lors du chargement des fichiers</li>';
+            }
+        }
+
+        // Bouton "Uploader ici" dans la colonne dossier
+        function showUploadToDir(dir) {
+            uploadTargetDir = dir;
+            document.getElementById('fileInput').click();
+        }
+
+        // Fonctions utilitaires pour les actions sur les fichiers
+        function downloadFile(file) {
+            fetch(`/files/download?name=${encodeURIComponent(file)}`, {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            }).then(async res => {
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file.split('/').pop();
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('Erreur téléchargement');
+                }
+            });
+        }
+        function deleteFile(file) {
+            fetch(`/files?name=${encodeURIComponent(file)}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': localStorage.getItem('token') }
+            }).then(() => loadFiles());
+        }
+        function compressFile(file) {
+            fetch(`/files/compress?name=${encodeURIComponent(file)}`, {
+                method: 'POST',
+                headers: { 'Authorization': localStorage.getItem('token') }
+            }).then(() => {
+                alert('Compression lancée');
+                loadFiles();
+            });
+        }
+
+        // Télécharger un fichier partagé
+        function downloadSharedFile(ownerId, folder, filename) {
+            fetch(`/shared-folders/download?owner=${encodeURIComponent(ownerId)}&folder=${encodeURIComponent(folder)}&file=${encodeURIComponent(filename)}`, {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            }).then(async res => {
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                } else {
+                    alert('Erreur téléchargement');
+                }
+            });
+        }
+
+        // Upload général ou dans un dossier spécifique
+        document.getElementById('uploadBtn').onclick = function () {
+            uploadTargetDir = '';
+            document.getElementById('fileInput').click();
+        };
+
+        document.getElementById('fileInput').onchange = async function () {
+            if (!this.files.length) return;
+            const file = this.files[0];
+            let url = '/files/upload';
+            let headers = {
+                'Authorization': localStorage.getItem('token'),
+                'x-filename': file.name
+            };
+            if (uploadTargetDir && uploadTargetDir !== 'racine') {
+                headers['x-dir'] = uploadTargetDir.replace(/\/$/, '');
+            }
+            const res = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: file
+            });
+            if (res.ok) {
+                loadFiles();
+            } else {
+                alert('Erreur upload');
+            }
+            uploadTargetDir = '';
+            this.value = '';
+        };
+
+        // Affichage initial
+        if (isLoggedIn()) showMain();
+        else showLogin();
+
+        // Socket
+        function connectWebSocket() {
+            ws = new WebSocket('ws://localhost:8081');
+            ws.onopen = () => {
+                // S'authentifier auprès du serveur WebSocket
+                const token = localStorage.getItem('token');
+                if (token) {
+                    ws.send(JSON.stringify({ userId: token }));
+                }
+            };
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.message) {
+                        alert(data.message);
+                    }
+                } catch (e) {
+                    // Ignore les messages invalides
+                }
+            };
+            ws.onclose = () => {
+                // Reconnexion automatique après 2s si déconnecté
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        // Création de dossier
+        document.getElementById('createDirBtn').onclick = async function () {
+            const dirName = document.getElementById('newDirName').value.trim();
+            if (!dirName) return alert('Nom de dossier requis');
+            const res = await fetch('/files/mkdir', {
+                method: 'POST',
+                headers: {
+                    'Authorization': localStorage.getItem('token'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ dirname: dirName })
+            });
+            if (res.ok) {
+                alert('Dossier créé');
+                loadFiles();
+                document.getElementById('newDirName').value = '';
+            } else {
+                alert('Erreur création dossier');
+            }
+        };
+
+        // Charge la liste des utilisateurs (hors utilisateur courant)
+        async function loadUsers() {
+            const res = await fetch('/users', {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            });
+            if (!res.ok) return;
+            const users = await res.json();
+            const select = document.getElementById('userSelect');
+            select.innerHTML = '';
+            users.forEach(u => {
+                if (u.username !== localStorage.getItem('username')) {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.textContent = u.username;
+                    select.appendChild(opt);
+                }
+            });
+        }
+
+        // Charge la liste des dossiers (uniquement les dossiers)
+        async function loadFolders() {
+            const res = await fetch('/files', {
+                headers: { 'Authorization': localStorage.getItem('token') }
+            });
+            if (!res.ok) return;
+            const files = await res.json();
+            const select = document.getElementById('folderSelect');
+            select.innerHTML = '';
+            files.filter(f => f.endsWith('/')).forEach(folder => {
+                const opt = document.createElement('option');
+                opt.value = folder.replace(/\/$/, '');
+                opt.textContent = folder.replace(/\/$/, '');
+                select.appendChild(opt);
+            });
+        }
+
+        // Partage d'un dossier
+        document.getElementById('shareBtn').onclick = async function () {
+            const userId = document.getElementById('userSelect').value;
+            const folder = document.getElementById('folderSelect').value;
+            if (!userId || !folder) return alert('Sélectionnez un utilisateur et un dossier');
+            const res = await fetch('/share', {
+                method: 'POST',
+                headers: {
+                    'Authorization': localStorage.getItem('token'),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId, folder })
+            });
+            if (res.ok) {
+                alert('Dossier partagé !');
+            } else {
+                alert('Erreur lors du partage');
+            }
+        };
+
+        // Appelle ces fonctions dans showMain()
+        function showMain() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('mainSection').classList.remove('hidden');
+            document.getElementById('userDisplay').textContent = localStorage.getItem('username') || '';
+            loadFiles();
+            loadUsers();
+            loadFolders();
+            connectWebSocket();
+        }
+    </script>
+</body>
+
+</html>
