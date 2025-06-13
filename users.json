@@ -14,10 +14,7 @@
     "username": "a",
     "password": "a",
     "sharedFolders": [
-      {
-        "from": "user-004",
-        "folder": "efg"
-      }
+     
     ]
   },
   {
@@ -25,10 +22,7 @@
     "username": "b",
     "password": "b",
     "sharedFolders": [
-      {
-        "from": "user-003",
-        "folder": "abc"
-      }
+      
     ]
   }
 ]

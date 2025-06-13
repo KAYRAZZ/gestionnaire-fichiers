@@ -39,8 +39,6 @@ test('POST /login failure', (t, done) => {
   });
 });
 
-// Ajoute ceci à la suite de tests/server.test.js
-
 function getUsers(token, cb) {
   const req = http.request({
     hostname: 'localhost',
